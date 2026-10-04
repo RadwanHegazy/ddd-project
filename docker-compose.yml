@@ -1,0 +1,77 @@
+name: "ddd-ecommerce-system"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_USER: defineduser
+      POSTGRES_PASSWORD: definedpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U defineduser -d db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ddd-ecommerce-system-network
+
+  test_postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: test_db
+      POSTGRES_USER: defineduser
+      POSTGRES_PASSWORD: definedpassword
+    ports:
+      - "5433:5432"
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+    networks:
+      - ddd-ecommerce-system-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ddd-ecommerce-system-network
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/bin/sh", "/code/entrypoint.sh"]
+    command: ["uvicorn", "entrypoints.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/code
+    environment:
+      - DATABASE_URL=postgresql://defineduser:definedpassword@postgres:5432/db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - ddd-ecommerce-system-network
+
+volumes:
+  postgres_data:
+  test_postgres_data:
+
+
+networks:
+  ddd-ecommerce-system-network:
+    driver: bridge
